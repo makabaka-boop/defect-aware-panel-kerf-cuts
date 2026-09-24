@@ -1,0 +1,16 @@
+services:
+  api:
+    build: ./api
+    container_name: nesting-api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    container_name: nesting-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
