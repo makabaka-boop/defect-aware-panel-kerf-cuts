@@ -24,6 +24,7 @@ export default function App() {
   const [pieceW, setPieceW] = useState(2);
   const [pieceH, setPieceH] = useState(2);
   const [allowRotation, setAllowRotation] = useState(false);
+  const [kerfCells, setKerfCells] = useState(0);
   const [defects, setDefects] = useState([{ x: 4, y: 0 }]);
   const [solution, setSolution] = useState(null);
   const [error, setError] = useState(null);
@@ -63,6 +64,7 @@ export default function App() {
           piece_width: pieceW,
           piece_height: pieceH,
           allow_rotation: allowRotation,
+          kerf_cells: kerfCells,
           defects: defects.map((d) => [d.x, d.y]),
         }),
       });
@@ -85,6 +87,12 @@ export default function App() {
   const svgW = boardW * CELL;
   const svgH = boardH * CELL;
   const cuts = solution?.cuts ?? [];
+  const kerfs = solution?.kerfs ?? [];
+  // 面积账：板面积 = 成品 + 废料 + 锯缝（全部由结果复算）
+  const sumArea = (rs) => rs.reduce((s, r) => s + r.width * r.height, 0);
+  const pieceArea = solution ? sumArea(solution.pieces) : 0;
+  const scrapArea = solution ? sumArea(solution.scraps) : 0;
+  const kerfArea = solution ? sumArea(kerfs) : 0;
 
   return (
     <div className="app">
@@ -92,7 +100,8 @@ export default function App() {
         <h1>板材直切排样台</h1>
         <p>
           点击格子标记/取消瑕疵，求解后在全部直切树中取成品最多、刀数最少的方案，
-          红线按编号顺序即可逐刀下切。
+          红线按编号顺序即可逐刀下切。勾选「锯缝 1 格」后每刀会吃掉一整行/列，
+          被吃掉的格带以斜纹标出，可含瑕疵但永不算成品。
         </p>
       </header>
 
@@ -115,6 +124,14 @@ export default function App() {
               />
               <span>允许旋转 90°</span>
             </label>
+            <label className="field checkbox">
+              <input
+                type="checkbox"
+                checked={kerfCells === 1}
+                onChange={(e) => { setKerfCells(e.target.checked ? 1 : 0); setSolution(null); }}
+              />
+              <span>锯缝 1 格（每刀吃掉一整行/列）</span>
+            </label>
             <button onClick={solve} disabled={loading}>
               {loading ? "求解中…" : "求解"}
             </button>
@@ -132,6 +149,20 @@ export default function App() {
               {/* 板材底 */}
               <rect x={0} y={0} width={svgW} height={svgH} className="board-bg" />
 
+              {/* 锯缝斜纹图案 */}
+              <defs>
+                <pattern
+                  id="kerf-hatch"
+                  width="7"
+                  height="7"
+                  patternUnits="userSpaceOnUse"
+                  patternTransform="rotate(45)"
+                >
+                  <rect width="7" height="7" className="kerf-bg" />
+                  <line x1={0} y1={0} x2={0} y2={7} className="kerf-hatch-line" />
+                </pattern>
+              </defs>
+
               {/* 废料块（叠画层 1） */}
               {solution?.scraps.map((r, i) => (
                 <rect
@@ -144,7 +175,19 @@ export default function App() {
                 />
               ))}
 
-              {/* 成品块（叠画层 2） */}
+              {/* 锯缝格带（叠画层 2，每刀被吃掉的整行/列） */}
+              {kerfs.map((r, i) => (
+                <rect
+                  key={`kerf-${i}`}
+                  x={r.x * CELL}
+                  y={r.y * CELL}
+                  width={r.width * CELL}
+                  height={r.height * CELL}
+                  className="kerf-band"
+                />
+              ))}
+
+              {/* 成品块（叠画层 3） */}
               {solution?.pieces.map((r, i) => (
                 <g key={`piece-${i}`}>
                   <rect
@@ -167,7 +210,7 @@ export default function App() {
                 </g>
               ))}
 
-              {/* 网格线（叠画层 3） */}
+              {/* 网格线（叠画层 4） */}
               {Array.from({ length: boardW + 1 }, (_, i) => (
                 <line key={`gv-${i}`} x1={i * CELL} y1={0} x2={i * CELL} y2={svgH}
                   className="grid" />
@@ -177,7 +220,7 @@ export default function App() {
                   className="grid" />
               ))}
 
-              {/* 瑕疵格（叠画层 4，编辑层，可点） */}
+              {/* 瑕疵格（叠画层 5，编辑层，可点） */}
               {Array.from({ length: boardH }, (_, y) =>
                 Array.from({ length: boardW }, (_, x) => {
                   const defected = defects.some((d) => d.x === x && d.y === y);
@@ -210,7 +253,7 @@ export default function App() {
                 })
               )}
 
-              {/* 切线（叠画层 5，贯穿当前矩形，带顺序号） */}
+              {/* 切线（叠画层 6，贯穿当前矩形，带顺序号） */}
               {cuts.map((c) => {
                 const r = c.rect;
                 const x1 = c.orientation === "H" ? r.x * CELL : c.coord * CELL;
@@ -250,6 +293,7 @@ export default function App() {
           <div className="legend">
             <span><i className="sw piece" />成品</span>
             <span><i className="sw scrap" />废料</span>
+            <span><i className="sw kerf" />锯缝（被吃掉的格带）</span>
             <span><i className="sw defect" />瑕疵格（点击切换）</span>
             <span><i className="sw cut" />切割线（编号即下刀顺序）</span>
           </div>
@@ -264,6 +308,11 @@ export default function App() {
                 <div><strong>{solution.piece_count}</strong><span>成品件数</span></div>
                 <div><strong>{solution.cut_count}</strong><span>切割次数</span></div>
               </div>
+
+              <p className="area-account">
+                面积账：{boardW * boardH} 格 = 成品 {pieceArea} + 废料 {scrapArea}
+                {" "}+ 锯缝 {kerfArea}
+              </p>
 
               <h2>下刀顺序</h2>
               {solution.cuts.length === 0 && (
@@ -293,6 +342,20 @@ export default function App() {
                 ))}
                 {solution.pieces.length === 0 && <li className="muted">无成品</li>}
               </ul>
+
+              {kerfs.length > 0 && (
+                <>
+                  <h2>锯缝格带</h2>
+                  <ul className="coords">
+                    {kerfs.map((k, i) => (
+                      <li key={i}>
+                        ({k.x}, {k.y}) {k.width}×{k.height}
+                        <span className="muted">（被第 {i + 1} 刀吃掉）</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </>
           )}
 

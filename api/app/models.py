@@ -1,7 +1,8 @@
 """请求/响应模型与入参校验。
 
 板材宽高 2–10、件宽高 1–5；瑕疵格为不重复且不越界的整数坐标。
-任何越界、重复瑕疵或额外字段都由 FastAPI 返回 422。
+kerf_cells 取 0 或 1（缺省 0）：为 1 时每一刀从当前矩形吃掉一整行/列单元格。
+任何越界、重复瑕疵、非法 kerf_cells 或额外字段都由 FastAPI 返回 422。
 """
 
 from typing import List, Literal, Tuple
@@ -21,6 +22,7 @@ class SolveRequest(BaseModel):
     piece_height: int = Field(ge=PIECE_MIN, le=PIECE_MAX)
     allow_rotation: bool
     defects: List[Tuple[int, int]]
+    kerf_cells: Literal[0, 1] = 0
 
     @field_validator("board_width", "board_height", "piece_width", "piece_height")
     @classmethod
@@ -28,6 +30,14 @@ class SolveRequest(BaseModel):
         # True/False 是 int 子类，会被静默当作 1/0；尺寸字段显式拒绝
         if isinstance(v, bool):
             raise ValueError("尺寸必须是整数，不能是布尔值")
+        return v
+
+    @field_validator("kerf_cells", mode="before")
+    @classmethod
+    def _reject_bool_kerf(cls, v):
+        # Literal[0, 1] 会把 True/False 静默当作 1/0，须在 coercion 前拒绝
+        if isinstance(v, bool):
+            raise ValueError("kerf_cells 必须是 0 或 1，不能是布尔值")
         return v
 
     @field_validator("defects")
@@ -81,5 +91,6 @@ class SolveResponse(BaseModel):
     cut_count: int
     pieces: List[PieceOut]
     scraps: List[RectOut]
+    kerfs: List[RectOut]
     cuts: List[CutOut]
     tree: dict

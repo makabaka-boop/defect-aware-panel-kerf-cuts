@@ -31,5 +31,6 @@ def solve(req: SolveRequest):
         piece_height=req.piece_height,
         allow_rotation=req.allow_rotation,
         defects=req.defects,
+        kerf_cells=req.kerf_cells,
     )
     return solver.solve()

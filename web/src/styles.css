@@ -61,6 +61,11 @@ button:disabled { background: #9bb8f2; cursor: wait; }
 .piece { fill: var(--piece); stroke: var(--piece-edge); stroke-width: 2; }
 .piece-label { font-size: 15px; font-weight: 600; fill: #1f6b35; pointer-events: none; }
 
+/* 锯缝格带：斜纹 + 锯末色描边，显式标出每刀吃掉的整行/列 */
+.kerf-bg { fill: #f7e8c3; }
+.kerf-hatch-line { stroke: #d48806; stroke-width: 2.5; }
+.kerf-band { fill: url(#kerf-hatch); stroke: #ad6800; stroke-width: 1.5; }
+
 .cell { cursor: pointer; }
 .cell-hit { fill: transparent; }
 .cell:hover .cell-hit { fill: rgba(22, 100, 255, 0.08); }
@@ -81,6 +86,7 @@ button:disabled { background: #9bb8f2; cursor: wait; }
 }
 .sw.piece { background: var(--piece); border-color: var(--piece-edge); }
 .sw.scrap { background: var(--scrap); }
+.sw.kerf { background: repeating-linear-gradient(45deg, #f7e8c3 0 3px, #d48806 3px 5px); }
 .sw.defect { background: var(--defect); }
 .sw.cut { background: repeating-linear-gradient(90deg, var(--cut) 0 4px, transparent 4px 8px); }
 
@@ -90,6 +96,11 @@ button:disabled { background: #9bb8f2; cursor: wait; }
 }
 .stats strong { display: block; font-size: 26px; color: #1664ff; }
 .stats span { color: var(--muted); font-size: 12px; }
+
+.area-account {
+  margin: 0 0 4px; font-size: 13px; color: #555;
+  background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; padding: 6px 10px;
+}
 
 h2 { font-size: 14px; margin: 16px 0 6px; }
 .cuts, .coords { margin: 0; padding-left: 20px; }
