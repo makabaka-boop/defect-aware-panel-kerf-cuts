@@ -9,6 +9,11 @@
 
 叶块只能是废料，或尺寸恰好等于目标件（允许旋转时含旋转尺寸）且不含瑕疵的成品。
 
+锯缝（kerf_cells）：锯片厚度按单位格计。``kerf_cells=0`` 时切线零宽，行为与
+既有版本逐项一致；``kerf_cells=1`` 时每刀从当前矩形额外吃掉坐标处的一整行
+（H 切）或一整列（V 切），两侧子矩形都必须非空。锯缝格带可以包含瑕疵，但
+永远是被消耗的材料，不能成为成品；它在切割树节点、cuts 与废料清单中都显式标出。
+
 实现为对子矩形的记忆化搜索。矩形用 ``(x, y, w, h)`` 表示，原点在左上角，
 x 向右、y 向下。切法候选按并列规则要求的次序枚举（H 坐标升序先于 V 坐标升序），
 配合严格比较（只有更优才替换当前最优），结果天然确定且与并列规则一致。
@@ -21,11 +26,13 @@ Rect = Tuple[int, int, int, int]
 # 内部节点（统一布局，便于缓存与取统计值）：
 #   成品叶: ("piece", rect, pieces, cuts)
 #   废料叶: ("scrap", rect, pieces, cuts)
-#   切割内: ("cut",   rect, pieces, cuts, orientation, coord, first, second)
+#   切割内: ("cut",   rect, pieces, cuts, orientation, coord, first, second, kerf)
+# kerf 为该刀吃掉的锯缝格带矩形（kerf_cells=0 时为 None，不进入任何输出）。
 Node = Tuple
 
 PIECES = 2
 CUTS = 3
+KERF = 8
 
 
 def _build_defect_prefix(width: int, height: int, defects: Sequence[Tuple[int, int]]):
@@ -50,12 +57,16 @@ class Solver:
         piece_height: int,
         allow_rotation: bool,
         defects: Sequence[Tuple[int, int]],
+        kerf_cells: int = 0,
     ):
+        if kerf_cells not in (0, 1):
+            raise ValueError("kerf_cells 只能是 0 或 1")
         self.W = board_width
         self.H = board_height
         self.pw = piece_width
         self.ph = piece_height
         self.allow_rotation = allow_rotation
+        self.kerf = kerf_cells
         # 成品可接受的 (宽, 高) 集合（正方形去重）
         self.targets = {(piece_width, piece_height)}
         if allow_rotation:
@@ -79,6 +90,7 @@ class Solver:
         故「递归比较子树」在到达该层时结果已确定。
         """
         x, y, w, h = rect
+        kc = self.kerf
 
         # 叶候选：恰好等于目标件尺寸且无瑕疵 -> 成品叶（1 件 0 刀，恒优于废料叶）
         if (w, h) in self.targets and self._defect_count(rect) == 0:
@@ -87,10 +99,11 @@ class Solver:
             # 其余一律可整块作为废料叶（0 件 0 刀）
             best = ("scrap", rect, 0, 0)
 
-        # 所有整数网格线 H 切，坐标升序（上块 first，下块 second）
-        for k in range(1, h):
+        # 所有整数网格线 H 切，坐标升序（上块 first，下块 second）。
+        # kerf=1 时锯缝吃掉 coord 整行，上下子矩形都必须非空（坐标至多 h-2）。
+        for k in range(1, h - kc):
             top = (x, y, w, k)
-            bottom = (x, y + k, w, h - k)
+            bottom = (x, y + k + kc, w, h - k - kc)
             tn, bn = self._solve(top), self._solve(bottom)
             cand = (
                 "cut",
@@ -101,14 +114,16 @@ class Solver:
                 y + k,
                 tn,
                 bn,
+                (x, y + k, w, kc) if kc else None,
             )
             if (cand[PIECES], -cand[CUTS]) > (best[PIECES], -best[CUTS]):
                 best = cand
 
-        # 所有整数网格线 V 切，坐标升序（左块 first，右块 second）
-        for k in range(1, w):
+        # 所有整数网格线 V 切，坐标升序（左块 first，右块 second）。
+        # kerf=1 时锯缝吃掉 coord 整列，左右子矩形都必须非空。
+        for k in range(1, w - kc):
             left = (x, y, k, h)
-            right = (x + k, y, w - k, h)
+            right = (x + k + kc, y, w - k - kc, h)
             ln, rn = self._solve(left), self._solve(right)
             cand = (
                 "cut",
@@ -119,6 +134,7 @@ class Solver:
                 x + k,
                 ln,
                 rn,
+                (x + k, y, kc, h) if kc else None,
             )
             if (cand[PIECES], -cand[CUTS]) > (best[PIECES], -best[CUTS]):
                 best = cand
@@ -156,16 +172,20 @@ class Solver:
                 scraps.append(rect_dict(rect))
                 return order
 
-            orientation, coord, first, second = node[4], node[5], node[6], node[7]
+            orientation, coord = node[4], node[5]
+            first, second, kerf = node[6], node[7], node[KERF]
             order += 1
-            cuts.append(
-                {
-                    "order": order,
-                    "orientation": orientation,
-                    "coord": coord,
-                    "rect": rect_dict(rect),
-                }
-            )
+            cut = {
+                "order": order,
+                "orientation": orientation,
+                "coord": coord,
+                "rect": rect_dict(rect),
+            }
+            if kerf is not None:
+                # 锯缝格带：被这刀吃掉的整行/整列，显式记入 cuts 与废料清单
+                cut["kerf"] = rect_dict(kerf)
+                scraps.append({**rect_dict(kerf), "kerf": True})
+            cuts.append(cut)
             # 前序遍历：先切当前块，再依次切上/下（或左/右）子块 —— 可直接照单下刀
             order = walk(first, order)
             order = walk(second, order)
@@ -188,8 +208,9 @@ def _node_to_json(node: Node) -> dict:
     rect = {"x": x, "y": y, "width": w, "height": h}
     if kind in ("piece", "scrap"):
         return {"type": kind, "rect": rect}
-    orientation, coord, first, second = node[4], node[5], node[6], node[7]
-    return {
+    orientation, coord = node[4], node[5]
+    first, second, kerf = node[6], node[7], node[KERF]
+    out = {
         "type": "cut",
         "orientation": orientation,
         "coord": coord,
@@ -199,3 +220,7 @@ def _node_to_json(node: Node) -> dict:
         "first": _node_to_json(first),
         "second": _node_to_json(second),
     }
+    if kerf is not None:
+        kx, ky, kw, kh = kerf
+        out["kerf"] = {"x": kx, "y": ky, "width": kw, "height": kh}
+    return out

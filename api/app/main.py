@@ -22,7 +22,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/api/solve", response_model=SolveResponse)
+@app.post("/api/solve", response_model=SolveResponse, response_model_exclude_none=True)
 def solve(req: SolveRequest):
     solver = Solver(
         board_width=req.board_width,
@@ -31,5 +31,6 @@ def solve(req: SolveRequest):
         piece_height=req.piece_height,
         allow_rotation=req.allow_rotation,
         defects=req.defects,
+        kerf_cells=req.kerf_cells,
     )
     return solver.solve()

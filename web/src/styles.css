@@ -6,6 +6,8 @@
   --piece: #b7e7c3;
   --piece-edge: #3a9e58;
   --scrap: #ece7dd;
+  --kerf: #f6e3b4;
+  --kerf-edge: #d48806;
   --defect: #4a4f58;
   --cut: #d4380d;
 }
@@ -58,6 +60,9 @@ button:disabled { background: #9bb8f2; cursor: wait; }
 .grid { stroke: #dfe2e7; stroke-width: 1; }
 
 .scrap { fill: var(--scrap); stroke: #c9c0b2; stroke-width: 1; }
+.kerf { fill: url(#kerf-hatch); stroke: var(--kerf-edge); stroke-width: 1; }
+.kerf-bg { fill: var(--kerf); }
+.kerf-stripe { stroke: var(--kerf-edge); stroke-width: 2; }
 .piece { fill: var(--piece); stroke: var(--piece-edge); stroke-width: 2; }
 .piece-label { font-size: 15px; font-weight: 600; fill: #1f6b35; pointer-events: none; }
 
@@ -81,6 +86,10 @@ button:disabled { background: #9bb8f2; cursor: wait; }
 }
 .sw.piece { background: var(--piece); border-color: var(--piece-edge); }
 .sw.scrap { background: var(--scrap); }
+.sw.kerf {
+  background: repeating-linear-gradient(45deg, var(--kerf) 0 4px, var(--kerf-edge) 4px 6px);
+  border-color: var(--kerf-edge);
+}
 .sw.defect { background: var(--defect); }
 .sw.cut { background: repeating-linear-gradient(90deg, var(--cut) 0 4px, transparent 4px 8px); }
 
